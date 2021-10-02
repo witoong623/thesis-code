@@ -1,7 +1,7 @@
 import gym
 import torch.optim as optim
-from agent import CartPoleAgent
-from main import ActorCriticModel
+from agents import CartPoleAgent
+from models import LinearActorCriticModel
 
 
 hidden_size = 256
@@ -13,7 +13,7 @@ if __name__ == '__main__':
     num_inputs = env.observation_space.shape[0]
     num_outputs = env.action_space.n
 
-    model = ActorCriticModel(num_inputs, num_outputs, hidden_size)
+    model = LinearActorCriticModel(num_inputs, num_outputs, hidden_size)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
     agent = CartPoleAgent('cartpole-classic', env, model, optimizer, 3000, 500)
