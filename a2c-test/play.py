@@ -14,6 +14,6 @@ model = LinearActorCriticModel(num_inputs, num_outputs, hidden_size)
 model.load_state_dict(torch.load('cartpole-classic.pth', map_location='cpu'))
 model.eval()
 
-agent = CartPoleAgent('cartpole-classic', env, model, None, 3000, 500)
+agent = CartPoleAgent('cartpole-classic', env, model, 3000, 500)
 
 agent.play()

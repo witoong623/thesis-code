@@ -16,5 +16,5 @@ if __name__ == '__main__':
     model = LinearActorCriticModel(num_inputs, num_outputs, hidden_size)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
-    agent = CartPoleAgent('cartpole-classic', env, model, optimizer, 3000, 500)
-    agent.train()
+    agent = CartPoleAgent('cartpole-classic', env, model, 3000, 500)
+    agent.train(optimizer, True)
