@@ -159,11 +159,11 @@ class CartPoleAgent(ActorCriticAgent):
 
 
 class CartPole2DAgent(ActorCriticAgent):
-    def __init__(self, name, env, model, num_episode, max_step, gamma=0.99, device='cpu'):
+    def __init__(self, name, env, model, num_episode, max_step, num_images, image_size, gamma=0.99, device='cpu'):
         super().__init__(name, env, model, num_episode, max_step, gamma=gamma, device=device)
 
-        self.num_images = 4
-        self.image_size = (240, 160)
+        self.num_images = num_images
+        self.image_size = image_size
         self.image_memory = np.zeros((self.num_images, self.image_size[1], self.image_size[0]))
 
     def get_action(self, policy_dist):

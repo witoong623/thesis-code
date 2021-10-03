@@ -29,11 +29,11 @@ class LinearActorCriticModel(nn.Module):
 
 def create_2d_conv(input_channel):
     return nn.Sequential(
-        nn.Conv2d(input_channel, 64, 5, 3),
+        nn.Conv2d(input_channel, 32, 8, 4),
         nn.ReLU(),
-        nn.Conv2d(64, 64, 4, 2),
+        nn.Conv2d(32, 64, 4, 2),
         nn.ReLU(),
-        nn.Conv2d(64, 64, 3, 1),
+        nn.Conv2d(64, 64, 3),
         nn.ReLU(),
     )
 
@@ -44,7 +44,7 @@ class CNNActorCriticModel(nn.Module):
         
         self.policy_conv = create_2d_conv(input_channel)
         self.policy_linear = nn.Sequential(
-            nn.Linear(52992, hidden_size),
+            nn.Linear(17472, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, num_actions),
             nn.Softmax(dim=0)
@@ -52,7 +52,7 @@ class CNNActorCriticModel(nn.Module):
 
         self.value_cov = create_2d_conv(input_channel)
         self.value_linear = nn.Sequential(
-            nn.Linear(52992, hidden_size),
+            nn.Linear(17472, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, 1)
         )
