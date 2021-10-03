@@ -1,3 +1,4 @@
+import cv2
 import os
 import torch
 import pandas as pd
@@ -77,7 +78,7 @@ class ActorCriticAgent:
                 rewards.append(reward)
                 values.append(value_tensor)
 
-                log_prob = torch.log(policy_dist[0, action])
+                log_prob = torch.log(policy_dist[action])
                 log_action_probs.append(log_prob)
 
                 policy_dist_np = policy_dist.cpu().detach().numpy()
@@ -153,5 +154,49 @@ class CartPoleAgent(ActorCriticAgent):
 
     def reset(self):
         state = self.env.reset()
+
+        return state
+
+
+class CartPole2DAgent(ActorCriticAgent):
+    def __init__(self, name, env, model, num_episode, max_step, gamma=0.99, device='cpu'):
+        super().__init__(name, env, model, num_episode, max_step, gamma=gamma, device=device)
+
+        self.num_images = 4
+        self.image_size = (240, 160)
+        self.image_memory = np.zeros((self.num_images, self.image_size[1], self.image_size[0]))
+
+    def get_action(self, policy_dist):
+        probs = Categorical(policy_dist)
+        action = probs.sample().cpu().detach().item()
+
+        return action
+
+    def _get_image_tensor(self):
+        ''' get image, preprocess and return image tensor to be used as state
+            credit to: https://pylessons.com/CartPole-PER-CNN/
+        '''
+        img = self.env.render(mode='rgb_array')
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+        img_rgb_resized = cv2.resize(img_rgb, self.image_size, interpolation=cv2.INTER_CUBIC)
+        img_rgb_resized[img_rgb_resized < 255] = 0
+        img_rgb_resized = img_rgb_resized / 255
+
+        self.image_memory = np.roll(self.image_memory, 1, axis = 0)
+        self.image_memory[0,:,:] = img_rgb_resized
+
+        return torch.tensor(self.image_memory, dtype=torch.float32, device=self.device).unsqueeze(0)
+
+    def step(self, action):
+        _, reward, done, _ = self.env.step(action)
+        new_state = self._get_image_tensor()
+
+        return new_state, reward, done
+
+    def reset(self):
+        self.env.reset()
+
+        for _ in range(self.num_images):
+            state = self._get_image_tensor()
 
         return state

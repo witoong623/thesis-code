@@ -2,3 +2,6 @@ a2c-matt
 __pycache__
 *.pth
 a2c-test/graph
+
+# probably file for virtual frame buffer
+core
