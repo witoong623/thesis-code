@@ -8,6 +8,8 @@ from pathlib import Path
 from tqdm import trange
 from torch.distributions import Categorical
 
+np.seterr(divide='raise')
+
 
 class ActorCriticAgent:
     ''' env should be gym environment '''
@@ -60,6 +62,7 @@ class ActorCriticAgent:
         self.model.train()
         self.all_rewards = []
         self.all_lens = []
+        zero_prop_count = 0
 
         for episode in (tq := trange(self.num_episode)):
             entropy_term = 0
@@ -82,7 +85,13 @@ class ActorCriticAgent:
                 log_action_probs.append(log_prob)
 
                 policy_dist_np = policy_dist.cpu().detach().numpy()
-                entropy = np.sum(np.mean(policy_dist_np) * np.log(policy_dist_np))
+                try:
+                    entropy = np.sum(np.mean(policy_dist_np) * np.log(policy_dist_np))
+                except FloatingPointError:
+                    policy_dist_np = np.where(policy_dist_np == 0, 0.001, policy_dist_np)
+                    entropy = np.sum(np.mean(policy_dist_np) * np.log(policy_dist_np))
+                    zero_prop_count += 1
+
                 entropy_term += entropy
 
                 if done or step == self.max_step - 1:
@@ -91,7 +100,7 @@ class ActorCriticAgent:
                     self.all_lens.append(step)
 
                     if episode % 10 == 0:
-                        tq.set_description(f'Episode: {episode}, reward: {sum(rewards)}, total length: {step}')
+                        tq.set_description(f'Episode: {episode}, reward: {sum(rewards)}, total length: {step}, zero prop: {zero_prop_count}')
 
                     break
 
@@ -114,6 +123,7 @@ class ActorCriticAgent:
             ac_loss.backward()
             optimizer.step()
 
+        print(f'encounter zero probability {zero_prop_count} times')
         torch.save(self.model.state_dict(), f'{self.name}.pth')
         if save_training_graph:
             self._save_training_graph()
