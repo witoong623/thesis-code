@@ -6,14 +6,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
 from tqdm import trange
-from torch.distributions import Categorical
+from torch.distributions import Categorical, Distribution
 
 np.seterr(divide='raise')
 
 
 class ActorCriticAgent:
     ''' env should be gym environment '''
-    def __init__(self, name, env, model, num_episode, max_step, gamma=0.99, device='cpu'):
+    def __init__(self, name, env, model, num_episode, max_step, gamma=0.99, temperature=0.001, device='cpu'):
         self.name = name
         self.env = env
         self.model = model
@@ -21,6 +21,7 @@ class ActorCriticAgent:
         self.num_episode = num_episode
         self.max_step = max_step
         self.gamma = gamma
+        self.temperature = temperature
         self.device = device
 
         self.all_rewards = []
@@ -28,17 +29,19 @@ class ActorCriticAgent:
 
         self.model.to(self.device)
 
-    def get_action(self, policy_dist):
-        ''' should return action '''
-        pass
+    def get_distribution(self, policies_probs) -> Distribution:
+        ''' should return class of torch.distributions '''
+        raise NotImplementedError()
 
     def step(self, action):
         ''' step through env, return new state, reward, done '''
-        pass
+        raise NotImplementedError()
+
 
     def reset(self):
         ''' should return new state after reset '''
-        pass
+        raise NotImplementedError()
+
 
     def _save_training_graph(self):
         Path('graph').mkdir(exist_ok=True)
@@ -53,19 +56,13 @@ class ActorCriticAgent:
         plt.title('Reward graph')
         plt.savefig(os.path.join('graph', f'{self.name}.jpg'))
 
-        # plt.plot(self.all_lens)
-        # plt.plot(average_lengths)
-        # plt.xlabel('Episode')
-        # plt.ylabel('Episode length')
-
     def train(self, optimizer, save_training_graph=False):
         self.model.train()
         self.all_rewards = []
         self.all_lens = []
-        zero_prop_count = 0
 
         for episode in (tq := trange(self.num_episode)):
-            entropy_term = 0
+            entropies = []
             rewards = []
             log_action_probs = []
             values = []
@@ -73,34 +70,26 @@ class ActorCriticAgent:
             state = self.reset()
 
             for step in range(self.max_step):
-                value_tensor, policy_dist = self.model(state)
-                action = self.get_action(policy_dist)
+                value, policy_probs = self.model(state)
+                action_dist = self.get_distribution(policy_probs)
+                action = action_dist.sample()
 
-                state, reward, done = self.step(action)
-                
+                state, reward, done = self.step(action.cpu().detach().item())
+
                 rewards.append(reward)
-                values.append(value_tensor)
+                values.append(value)
 
-                log_prob = torch.log(policy_dist[action])
-                log_action_probs.append(log_prob)
-
-                policy_dist_np = policy_dist.cpu().detach().numpy()
-                try:
-                    entropy = np.sum(np.mean(policy_dist_np) * np.log(policy_dist_np))
-                except FloatingPointError:
-                    policy_dist_np = np.where(policy_dist_np == 0, 0.001, policy_dist_np)
-                    entropy = np.sum(np.mean(policy_dist_np) * np.log(policy_dist_np))
-                    zero_prop_count += 1
-
-                entropy_term += entropy
+                log_action_probs.append(action_dist.log_prob(action))
+                # entropy is -np.sum(np.mean(dist) * np.log(dist))
+                entropies.append(action_dist.entropy())
 
                 if done or step == self.max_step - 1:
-                    Q_value = value_tensor.cpu().detach().item()
+                    Q_value = value.cpu().detach().item()
                     self.all_rewards.append(sum(rewards))
                     self.all_lens.append(step)
 
                     if episode % 10 == 0:
-                        tq.set_description(f'Episode: {episode}, reward: {sum(rewards)}, total length: {step}, zero prop: {zero_prop_count}')
+                        tq.set_description(f'Episode: {episode}, reward: {sum(rewards)}, total length: {step}')
 
                     break
 
@@ -112,18 +101,17 @@ class ActorCriticAgent:
             values = torch.tensor(values, dtype=torch.float32, device=self.device)
             Q_values = torch.tensor(Q_values, dtype=torch.float32, device=self.device)
             log_action_probs = torch.stack(log_action_probs)
+            entropies = torch.stack(entropies)
 
             advantage = Q_values - values
             actor_loss = (-log_action_probs * advantage).mean()
-            # MSE
             critic_loss = 0.5 * advantage.pow(2).mean()
-            
-            ac_loss = actor_loss + critic_loss + 0.001 * entropy_term
+            entropy_loss = entropies.sum()
+            ac_loss = actor_loss + critic_loss + self.temperature * entropy_loss
 
             ac_loss.backward()
             optimizer.step()
 
-        print(f'encounter zero probability {zero_prop_count} times')
         torch.save(self.model.state_dict(), f'{self.name}.pth')
         if save_training_graph:
             self._save_training_graph()
@@ -138,10 +126,11 @@ class ActorCriticAgent:
                 if render:
                     self.env.render()
 
-                _, policy_dist = self.model(state)
-                action = self.get_action(policy_dist)
+                _, policy_probs = self.model(state)
+                action_dist = self.get_distribution(policy_probs)
+                action = action_dist.sample()
 
-                state, reward, done = self.step(action)
+                state, reward, done = self.step(action.cpu().detach().item())
                 rewards += reward
 
                 t.set_description(f'reward: {rewards}, step: {step}')
@@ -151,11 +140,8 @@ class ActorCriticAgent:
 
 
 class CartPoleAgent(ActorCriticAgent):
-    def get_action(self, policy_dist):
-        probs = Categorical(policy_dist)
-        action = probs.sample().cpu().detach().item()
-
-        return action
+    def get_distribution(self, policies_probs):
+        return Categorical(probs=policies_probs)
 
     def step(self, action):
         new_state, reward, done, _ = self.env.step(action)
@@ -169,18 +155,24 @@ class CartPoleAgent(ActorCriticAgent):
 
 
 class CartPole2DAgent(ActorCriticAgent):
-    def __init__(self, name, env, model, num_episode, max_step, num_images, image_size, gamma=0.99, device='cpu'):
-        super().__init__(name, env, model, num_episode, max_step, gamma=gamma, device=device)
+    def __init__(self, name, env, model, num_episode, max_step, num_images, image_size, skip_frame=1, **kwargs):
+        super().__init__(name, env, model, num_episode, max_step, **kwargs)
 
         self.num_images = num_images
         self.image_size = image_size
-        self.image_memory = np.zeros((self.num_images, self.image_size[1], self.image_size[0]))
+        self.skip_frame = skip_frame
+        # this buffer size holds exactly the same amount of buffer needed
+        self.image_buffer = np.zeros((self.num_images * self.skip_frame - (self.skip_frame-1), self.image_size[1], self.image_size[0]))
+        self.init_buffer = False
 
-    def get_action(self, policy_dist):
-        probs = Categorical(policy_dist)
-        action = probs.sample().cpu().detach().item()
+        self.frame_count = 0
 
-        return action
+
+    def get_distribution(self, policies_probs):
+        return Categorical(probs=policies_probs)
+
+    def _save_image(self, image):
+        cv2.imwrite(f'output_images/frame_{self.frame_count}.jpg', image)
 
     def _get_image_tensor(self):
         ''' get image, preprocess and return image tensor to be used as state
@@ -189,13 +181,21 @@ class CartPole2DAgent(ActorCriticAgent):
         img = self.env.render(mode='rgb_array')
         img_rgb = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
         img_rgb_resized = cv2.resize(img_rgb, self.image_size, interpolation=cv2.INTER_CUBIC)
-        img_rgb_resized[img_rgb_resized < 255] = 0
         img_rgb_resized = img_rgb_resized / 255
 
-        self.image_memory = np.roll(self.image_memory, 1, axis = 0)
-        self.image_memory[0,:,:] = img_rgb_resized
+        if not self.init_buffer:
+            for t in range(self.image_buffer.shape[0]):
+                self.image_buffer[t,:,:] = img_rgb_resized
+            self.init_buffer = True
 
-        return torch.tensor(self.image_memory, dtype=torch.float32, device=self.device).unsqueeze(0)
+        self.image_buffer = np.roll(self.image_buffer, 1, axis=0)
+        self.image_buffer[0,:,:] = img_rgb_resized
+
+        state_images = np.zeros((self.num_images, self.image_size[1], self.image_size[0]))
+        for i, t in enumerate(range(0, self.num_images * self.skip_frame, self.skip_frame)):
+            state_images[i,:,:] = self.image_buffer[t]
+
+        return torch.tensor(state_images, dtype=torch.float32, device=self.device).unsqueeze(0)
 
     def step(self, action):
         _, reward, done, _ = self.env.step(action)
@@ -206,7 +206,6 @@ class CartPole2DAgent(ActorCriticAgent):
     def reset(self):
         self.env.reset()
 
-        for _ in range(self.num_images):
-            state = self._get_image_tensor()
+        state = self._get_image_tensor()
 
         return state
