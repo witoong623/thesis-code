@@ -27,6 +27,21 @@ class LinearActorCriticModel(nn.Module):
         return value, policy_dist
 
 
+def create_2d_conv_rom(input_channel):
+    ''' Rom version that confirm to be working '''
+    return nn.Sequential(
+        nn.Conv2d(input_channel, 128, 5, stride=2),
+        nn.BatchNorm2d(128),
+        nn.ReLU(),
+        nn.Conv2d(128, 128, 5, stride=2),
+        nn.BatchNorm2d(128),
+        nn.ReLU(),
+        nn.Conv2d(128, 32, 5, stride=2),
+        nn.BatchNorm2d(32),
+        nn.ReLU(),
+    )
+
+
 def create_2d_conv(input_channel):
     return nn.Sequential(
         nn.Conv2d(input_channel, 32, 8, stride=4),
@@ -44,7 +59,7 @@ class CNNActorCriticModel(nn.Module):
         
         self.policy_conv = create_2d_conv(input_channel)
         self.policy_linear = nn.Sequential(
-            nn.Linear(26624, hidden_size),
+            nn.Linear(8064, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, num_actions),
             nn.Softmax(dim=0)
@@ -52,7 +67,7 @@ class CNNActorCriticModel(nn.Module):
 
         self.value_cov = create_2d_conv(input_channel)
         self.value_linear = nn.Sequential(
-            nn.Linear(26624, hidden_size),
+            nn.Linear(8064, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, 1)
         )

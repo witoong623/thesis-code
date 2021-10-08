@@ -155,24 +155,24 @@ class CartPoleAgent(ActorCriticAgent):
 
 
 class CartPole2DAgent(ActorCriticAgent):
-    def __init__(self, name, env, model, num_episode, max_step, num_images, image_size, skip_frame=1, **kwargs):
+    def __init__(self, name, env, model, num_episode, max_step, num_images, image_size, skip_frame=1, crop_top=0, **kwargs):
         super().__init__(name, env, model, num_episode, max_step, **kwargs)
 
+        self.crop_top = crop_top
         self.num_images = num_images
         self.image_size = image_size
         self.skip_frame = skip_frame
         # this buffer size holds exactly the same amount of buffer needed
         self.image_buffer = np.zeros((self.num_images * self.skip_frame - (self.skip_frame-1), self.image_size[1], self.image_size[0]))
         self.init_buffer = False
-
         self.frame_count = 0
-
 
     def get_distribution(self, policies_probs):
         return Categorical(probs=policies_probs)
 
     def _save_image(self, image):
         cv2.imwrite(f'output_images/frame_{self.frame_count}.jpg', image)
+        self.frame_count += 1
 
     def _get_image_tensor(self):
         ''' get image, preprocess and return image tensor to be used as state
@@ -180,7 +180,10 @@ class CartPole2DAgent(ActorCriticAgent):
         '''
         img = self.env.render(mode='rgb_array')
         img_rgb = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+        img_rgb = img_rgb[self.crop_top:,:]
         img_rgb_resized = cv2.resize(img_rgb, self.image_size, interpolation=cv2.INTER_CUBIC)
+        img_rgb_resized[img_rgb_resized < 255] = 0
+        # self._save_image(img_rgb_resized)
         img_rgb_resized = img_rgb_resized / 255
 
         if not self.init_buffer:
@@ -194,7 +197,6 @@ class CartPole2DAgent(ActorCriticAgent):
         state_images = np.zeros((self.num_images, self.image_size[1], self.image_size[0]))
         for i, t in enumerate(range(0, self.num_images * self.skip_frame, self.skip_frame)):
             state_images[i,:,:] = self.image_buffer[t]
-
         return torch.tensor(state_images, dtype=torch.float32, device=self.device).unsqueeze(0)
 
     def step(self, action):
