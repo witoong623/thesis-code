@@ -42,7 +42,8 @@ def create_2d_conv_rom(input_channel):
     )
 
 
-def create_2d_conv(input_channel):
+def create_2d_conv_lab(input_channel):
+    ''' from DQN lab '''
     return nn.Sequential(
         nn.Conv2d(input_channel, 32, 8, stride=4),
         nn.ReLU(),
@@ -53,11 +54,22 @@ def create_2d_conv(input_channel):
     )
 
 
+def create_2d_conv_tutorial(input_channel):
+    ''' from https://pylessons.com/CartPole-PER-CNN/ '''
+    return nn.Sequential(
+        nn.Conv2d(input_channel, 64, 5, stride=3),
+        nn.ReLU(),
+        nn.Conv2d(64, 64, 4, stride=2),
+        nn.ReLU(),
+        nn.Conv2d(64, 64, 3, stride=1),
+        nn.ReLU(),
+    )
+
 class CNNActorCriticModel(nn.Module):
     def __init__(self, input_channel, num_actions, hidden_size):
         super().__init__()
         
-        self.policy_conv = create_2d_conv(input_channel)
+        self.policy_conv = create_2d_conv_lab(input_channel)
         self.policy_linear = nn.Sequential(
             nn.Linear(8064, hidden_size),
             nn.ReLU(),
@@ -65,7 +77,7 @@ class CNNActorCriticModel(nn.Module):
             nn.Softmax(dim=0)
         )
 
-        self.value_cov = create_2d_conv(input_channel)
+        self.value_cov = create_2d_conv_lab(input_channel)
         self.value_linear = nn.Sequential(
             nn.Linear(8064, hidden_size),
             nn.ReLU(),
@@ -75,11 +87,29 @@ class CNNActorCriticModel(nn.Module):
     def forward(self, state):
         ''' state is image tensor '''
         value_x = self.value_cov(state)
-        value_x = value_x.view(-1)
+        value_x = value_x.flatten(start_dim=1)
         value = self.value_linear(value_x)
 
         policy_x = self.policy_conv(state)
-        policy_x = policy_x.view(-1)
+        policy_x = policy_x.flatten(start_dim=1)
         policy = self.policy_linear(policy_x)
 
         return value, policy
+
+
+class CNNQNetwork(nn.Module):
+    def __init__(self, input_channel, num_actions, hidden_size):
+        super().__init__()
+
+        self.conv = create_2d_conv_tutorial(input_channel)
+
+        self.linear = nn.Sequential(
+            nn.Linear(19200, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, num_actions)
+        )
+
+    def forward(self, x):
+        x = self.conv(x)
+        x = x.flatten(start_dim=1)
+        return self.linear(x)

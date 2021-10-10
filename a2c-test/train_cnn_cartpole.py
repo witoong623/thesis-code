@@ -11,10 +11,9 @@ num_images = 2
 # run with command: xvfb-run -s "-screen 0 1400x900x24" python train_cnn_cartpole.py
 if __name__ == '__main__':
     env = gym.make("CartPole-v1")
-    num_inputs = env.observation_space.shape[0]
-    num_outputs = env.action_space.n
+    num_actions = env.action_space.n
 
-    model = CNNActorCriticModel(num_images, num_outputs, hidden_size)
+    model = CNNActorCriticModel(num_images, num_actions, hidden_size)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     # optimizer = optim.SGD(model.parameters(), lr=learning_rate)
     # optimizer = optim.RMSprop(model.parameters(), lr=learning_rate)
