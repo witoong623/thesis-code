@@ -1,0 +1,3 @@
+[submodule "Soft-Actor-Critic"]
+	path = Soft-Actor-Critic
+	url = https://github.com/witoong623/Soft-Actor-Critic.git
