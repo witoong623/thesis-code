@@ -2,6 +2,7 @@ a2c-matt
 __pycache__
 *.pth
 a2c-test/graph
+.ipynb_checkpoints
 
 # probably file for virtual frame buffer
 core
